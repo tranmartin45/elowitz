@@ -7,7 +7,7 @@ import skimage
 import skimage.io
 import skimage.filters
 import skimage.morphology
-from skimage.filters import threshold_otsu
+from skimage.filters import threshold_otsu, threshold_multiotsu, try_all_threshold
 from skimage import registration
 from skimage.feature import ORB, match_descriptors
 from skimage.transform import matrix_transform
@@ -22,10 +22,6 @@ from skimage.color import label2rgb
 
 from scipy import ndimage as ndi
 from scipy.ndimage import fourier_shift
-
-from holoviews.operation.datashader import datashade, shade, dynspread, rasterize
-from holoviews.operation import decimate
-from holoviews.plotting.util import process_cmap
 
 import os
 import glob
@@ -47,6 +43,40 @@ from sklearn import linear_model
 
 def test():
     print('Hello world.')
+
+def default_slice(dapi_raw, cfp_raw, chfp_raw, select_slice):
+    '''
+    Use default slice provided to slice all images.
+    Returns dapi, cfp, and chfp as the selected slice within the repsective channel.
+    
+    ----------
+    Parameters
+    ----------
+    dapi_raw : array
+        z-stack of dapi
+    cfp_raw : array
+        z-stack of cfp
+    chfp_raw : array
+        z-stack of chfp
+    select_slice : int
+        use this slice to cut all z-stacks
+        
+    -------
+    Output
+    -------
+    dapi : array
+        default slice of dapi_raw
+    cfp : array
+        default slice of cfp_raw
+    chfp : array
+        default slice of chfp_raw
+    '''
+    
+    dapi = dapi_raw[select_slice]
+    cfp = cfp_raw[select_slice]
+    chfp = chfp_raw[select_slice]
+    
+    return dapi, cfp, chfp
 
 def best_slice(dapi_raw, cfp_raw, chfp_raw):
     '''
@@ -103,7 +133,7 @@ def best_slice(dapi_raw, cfp_raw, chfp_raw):
 def register_images(cfp, chfp):
     '''
     Registers the two channels using register_translation from skimage.features.
-    Prints detected pixel offset (y,x).
+    Prints detected pixel offset (y,x). If shift is more than 10 pixels in y or x, will default to [y, x] = [0, -5]
     Returns corrected moving array.
     
     ----------
@@ -124,10 +154,14 @@ def register_images(cfp, chfp):
     shift, error, diffphase = register_translation(cfp, chfp)
     print(f"Detected pixel offset (y, x): {shift}")
     
-    if shift[0] > 10.0:
-        print('detected pixel offset is more than 10, possible error.')
-    if shift[1] > 10.0:
-        print('detected pixel offset is more than 10, possible error.')
+    if abs(shift[0]) > 10.0:
+        shift = [0,-5]
+        print('detected pixel offset is more than 10, default shift to [0,-5].')
+    elif abs(shift[1]) > 10.0:
+        shift = [0,-5]
+        print('detected pixel offset is more than 10, default shift to [0,-5].')
+    else:
+        print('pass check: shift is less than 10 in both dimensions')
         
     chfp_shift = ndi.shift(chfp, shift)
 
@@ -542,12 +576,17 @@ def ws(image, min_size, intensity_image):
     labels = skimage.morphology.watershed(-distance, markers, mask=image, watershed_line=True)
     ws_mask = skimage.morphology.remove_small_objects(labels, min_size=min_size)
     label_image = skimage.measure.label(ws_mask)
-    props = skimage.measure.regionprops_table(label_image, intensity_image=intensity_image, properties=('label',
-                                                                                             'centroid',
-                                                                                             'area',
-                                                                                             'mean_intensity'))
-    df = pd.DataFrame(props)
-    area = df['area'].sum()
+    if label_image.sum() != 0:
+        props = skimage.measure.regionprops_table(label_image, intensity_image=intensity_image, properties=('label',
+                                                                                                 'centroid',
+                                                                                                 'area',
+                                                                                                 'mean_intensity'))
+        df = pd.DataFrame(props)
+        area = df['area'].sum()
+    else:
+        props = {'label': [0], 'centroid': [0], 'area': [0], 'mean_intensity': [0]}
+        df = pd.DataFrame(props)
+        area = df['area'].sum()
     return label_image, df, area
 
 def remove_large(label_image, max_size, df, intensity_image):
@@ -575,22 +614,27 @@ def remove_large(label_image, max_size, df, intensity_image):
         DataFrame with large segments subtracted
         
     '''
-    empty_array = np.zeros_like(label_image)
-    max_size = max_size
+    if label_image.sum() != 0:
+        empty_array = np.zeros_like(label_image)
+        max_size = max_size
 
-    for i, label in enumerate(df.loc[df.loc[:, 'area'] > max_size]['label']):
-        x = label_image == label
-        y = x * label
-        empty_array += y
-        
-    large_sub = label_image - empty_array
-    
-    props_large = skimage.measure.regionprops_table(large_sub, intensity_image=intensity_image, properties=('label',
-                                                                                         'centroid',
-                                                                                         'area',
-                                                                                         'mean_intensity'))
-    df_large = pd.DataFrame(props_large)
-    area_large = df_large['area'].sum()
+        for i, label in enumerate(df.loc[df.loc[:, 'area'] > max_size]['label']):
+            x = label_image == label
+            y = x * label
+            empty_array += y
+
+        large_sub = label_image - empty_array
+
+        props_large = skimage.measure.regionprops_table(large_sub, intensity_image=intensity_image, properties=('label',
+                                                                                             'centroid',
+                                                                                             'area',
+                                                                                             'mean_intensity'))
+        df_large = pd.DataFrame(props_large)
+        area_large = df_large['area'].sum()
+    else:
+        large_sub = label_image
+        props = {'label': [0], 'centroid': [0], 'area': [0], 'mean_intensity': [0]}
+        df_large = pd.DataFrame(props)
     return large_sub, df_large
 
 def coloc(cfp_large_sub, chfp_large_sub, cfp, chfp):
@@ -627,13 +671,14 @@ def coloc(cfp_large_sub, chfp_large_sub, cfp, chfp):
                                                                                              'area',
                                                                                              'mean_intensity'))
     df_cfp_co = pd.DataFrame(props_cfp_co)
+    
 
     props_chfp_co = skimage.measure.regionprops_table(c_ch_label, intensity_image=chfp, properties=('label',
-                                                                                             'centroid',
-                                                                                             'area',
-                                                                                             'mean_intensity'))
+                                                                                                 'centroid',
+                                                                                                 'area',
+                                                                                                 'mean_intensity'))
     df_chfp_co = pd.DataFrame(props_chfp_co)
-
+    
     cfp_vals = df_cfp_co['mean_intensity'].values
     chfp_vals = df_chfp_co['mean_intensity'].values
     data = {'CFP mean intensity': cfp_vals, 'ChFP mean intensity': chfp_vals}
