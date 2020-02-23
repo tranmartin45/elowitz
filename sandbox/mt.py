@@ -169,12 +169,19 @@ def register_images(cfp, chfp):
     chfp = chfp_shift
     return chfp
 
+def imadjust(img, lower_bound=0.25, upper_bound=99.75):
+    lower = np.percentile(img, lower_bound)
+    upper = np.percentile(img, upper_bound)
+    out = (img - lower) * (255 / (upper - lower))
+    return np.clip(out, 0, 255, out)
+
 def show_two_ims(
     im_1,
     im_2,
     titles=[None, None],
     interpixel_distances=[0.13, 0.13],
-    cmap=[None, None]
+    cmap=[None, None],
+    colorbar=[False, False]
 ):
     """
     Convenient function for showing two images side by side.
@@ -190,6 +197,8 @@ def show_two_ims(
         follows the format of [im_1 ip dist, im_2 ip dist]
     cmap : list
         follows the format of [im_1 cmap, im_2 cmap]
+    colorbar : list
+        follows the format of [im_1 colorbar, im_2 colorbar]
     """
     p_1 = bebi103.image.imshow(
         im_1,
@@ -198,6 +207,7 @@ def show_two_ims(
         cmap=cmap[0],
         #interpixel_distance=interpixel_distances[0],
         #length_units="µm",
+        colorbar=colorbar[0]
     )
     p_2 = bebi103.image.imshow(
         im_2,
@@ -206,6 +216,7 @@ def show_two_ims(
         cmap=cmap[1],
         #interpixel_distance=interpixel_distances[1],
         #length_units="µm",
+        colorbar=colorbar[1]
     )
     p_2.x_range = p_1.x_range
     p_2.y_range = p_1.y_range
@@ -219,6 +230,7 @@ def show_three_ims(
     titles=[None, None, None],
     interpixel_distances=[0.13, 0.13, 0.13],
     cmap=[None, None, None],
+    colorbar=[False, False, False]
 ):
     """Convenient function for showing three images side by side."""
     p_1 = bebi103.image.imshow(
@@ -228,6 +240,7 @@ def show_three_ims(
         cmap=cmap[0],
         #interpixel_distance=interpixel_distances[0],
         #length_units="µm",
+        colorbar=colorbar[0]
     )
     p_2 = bebi103.image.imshow(
         im_2,
@@ -236,6 +249,7 @@ def show_three_ims(
         cmap=cmap[1],
         #interpixel_distance=interpixel_distances[1],
         #length_units="µm",
+        colorbar=colorbar[1]
     )
     p_3 = bebi103.image.imshow(
         im_3,
@@ -244,6 +258,7 @@ def show_three_ims(
         cmap=cmap[2],
         #interpixel_distance=interpixel_distances[1],
         #length_units="µm",
+        colorbar=colorbar[2]
     )
     p_2.x_range = p_1.x_range
     p_2.y_range = p_1.y_range
@@ -260,6 +275,7 @@ def show_four_ims(
     titles=[None, None, None, None],
     interpixel_distances=[0.13, 0.13, 0.13, 0.13],
     cmap=[None, None, None, None],
+    colorbar=[False, False, False, False]
 ):
     """Convenient function for showing four images side by side."""
     p_1 = bebi103.image.imshow(
@@ -269,6 +285,7 @@ def show_four_ims(
         cmap=cmap[0],
         #interpixel_distance=interpixel_distances[0],
         #length_units="µm",
+        colorbar=colorbar[0]
     )
     p_2 = bebi103.image.imshow(
         im_2,
@@ -277,6 +294,7 @@ def show_four_ims(
         cmap=cmap[1],
         #interpixel_distance=interpixel_distances[1],
         #length_units="µm",
+        colorbar=colorbar[1]
     )
     p_3 = bebi103.image.imshow(
         im_3,
@@ -285,6 +303,7 @@ def show_four_ims(
         cmap=cmap[2],
         #interpixel_distance=interpixel_distances[1],
         #length_units="µm",
+        colorbar=colorbar[2]
     )
     p_4 = bebi103.image.imshow(
         im_4,
@@ -293,6 +312,7 @@ def show_four_ims(
         cmap=cmap[3],
         #interpixel_distance=interpixel_distances[1],
         #length_units="µm",
+        colorbar=colorbar[3]
     )
     p_2.x_range = p_1.x_range
     p_2.y_range = p_1.y_range
@@ -312,6 +332,7 @@ def show_five_ims(
     titles=[None, None, None, None, None],
     interpixel_distances=[0.13, 0.13, 0.13, 0.13, 0.13],
     cmap=[None, None, None, None, None],
+    colorbar=[False, False, False, False, False]
 ):
     """Convenient function for showing five images side by side."""
     p_1 = bebi103.image.imshow(
@@ -321,6 +342,7 @@ def show_five_ims(
         cmap=cmap[0],
         #interpixel_distance=interpixel_distances[0],
         #length_units="µm",
+        colorbar=colorbar[0]
     )
     p_2 = bebi103.image.imshow(
         im_2,
@@ -329,6 +351,7 @@ def show_five_ims(
         cmap=cmap[1],
         #interpixel_distance=interpixel_distances[1],
         #length_units="µm",
+        colorbar=colorbar[1]
     )
     p_3 = bebi103.image.imshow(
         im_3,
@@ -337,6 +360,7 @@ def show_five_ims(
         cmap=cmap[2],
         #interpixel_distance=interpixel_distances[1],
         #length_units="µm",
+        colorbar=colorbar[2]
     )
     p_4 = bebi103.image.imshow(
         im_4,
@@ -345,6 +369,7 @@ def show_five_ims(
         cmap=cmap[3],
         #interpixel_distance=interpixel_distances[1],
         #length_units="µm",
+        colorbar=colorbar[3]
     )
     p_5 = bebi103.image.imshow(
         im_5,
@@ -353,6 +378,7 @@ def show_five_ims(
         cmap=cmap[4],
         #interpixel_distance=interpixel_distances[1],
         #length_units="µm",
+        colorbar=colorbar[4]
     )
     p_2.x_range = p_1.x_range
     p_2.y_range = p_1.y_range
@@ -375,6 +401,7 @@ def show_six_ims(
     titles=[None, None, None, None, None, None],
     interpixel_distances=[0.13, 0.13, 0.13, 0.13, 0.13, 0.13],
     cmap=[None, None, None, None, None, None],
+    colorbar=[False, False, False, False, False, False]
 ):
     """Convenient function for showing six images side by side."""
     p_1 = bebi103.image.imshow(
@@ -384,6 +411,7 @@ def show_six_ims(
         cmap=cmap[0],
         #interpixel_distance=interpixel_distances[0],
         #length_units="µm",
+        colorbar=colorbar[0]
     )
     p_2 = bebi103.image.imshow(
         im_2,
@@ -392,6 +420,7 @@ def show_six_ims(
         cmap=cmap[1],
         #interpixel_distance=interpixel_distances[1],
         #length_units="µm",
+        colorbar=colorbar[1]
     )
     p_3 = bebi103.image.imshow(
         im_3,
@@ -400,6 +429,7 @@ def show_six_ims(
         cmap=cmap[2],
         #interpixel_distance=interpixel_distances[1],
         #length_units="µm",
+        colorbar=colorbar[2]
     )
     p_4 = bebi103.image.imshow(
         im_4,
@@ -408,6 +438,7 @@ def show_six_ims(
         cmap=cmap[3],
         #interpixel_distance=interpixel_distances[1],
         #length_units="µm",
+        colorbar=colorbar[3]
     )
     p_5 = bebi103.image.imshow(
         im_5,
@@ -416,6 +447,7 @@ def show_six_ims(
         cmap=cmap[4],
         #interpixel_distance=interpixel_distances[1],
         #length_units="µm",
+        colorbar=colorbar[4]
     )
     p_6 = bebi103.image.imshow(
         im_6,
@@ -424,6 +456,7 @@ def show_six_ims(
         cmap=cmap[5],
         #interpixel_distance=interpixel_distances[1],
         #length_units="µm",
+        colorbar=colorbar[5]
     )
     p_2.x_range = p_1.x_range
     p_2.y_range = p_1.y_range
@@ -543,7 +576,7 @@ def dilate(dapi_filt_gauss_bw, cfp_filt_gauss_bw, chfp_filt_gauss_bw, size):
     chfp_dil = skimage.morphology.dilation(chfp_filt_gauss_bw, selem)
     return dapi_dil, cfp_dil, chfp_dil
 
-def ws(image, min_size, intensity_image):
+def ws(image, footprint, min_size, intensity_image):
     '''
     Function to perform watershed and remove small objects. Will generate a dataframe and output total area
     of the watershed cells.
@@ -553,6 +586,8 @@ def ws(image, min_size, intensity_image):
     ----------
     image : array
         image should be filtered and segmented
+    footprint : np.ones((int,int))
+        represents the local region within which to search for peaks at every point in image.
     min_size : int
         will remove all objects smaller than min_size
     intensity_image : array
@@ -570,7 +605,7 @@ def ws(image, min_size, intensity_image):
     '''
     
     distance = ndi.distance_transform_edt(image)
-    local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((25,25)),
+    local_maxi = peak_local_max(distance, indices=False, footprint=footprint,
                                 labels=image)
     markers = ndi.label(local_maxi)[0]
     labels = skimage.morphology.watershed(-distance, markers, mask=image, watershed_line=True)
@@ -588,6 +623,7 @@ def ws(image, min_size, intensity_image):
         df = pd.DataFrame(props)
         area = df['area'].sum()
     return label_image, df, area
+
 
 def remove_large(label_image, max_size, df, intensity_image):
     '''
