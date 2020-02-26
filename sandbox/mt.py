@@ -624,6 +624,114 @@ def ws(image, footprint, min_size, intensity_image):
         area = df['area'].sum()
     return label_image, df, area
 
+def ws_dot(image):
+    '''
+    Function to perform watershed. Will generate labels, distance transform, and markers.
+    Made with parameters specific for dot segmentation (distance=0, default selem (1))
+    
+    ----------
+    Parameters
+    ----------
+    image : array
+        image should be filtered and segmented
+    
+    ---------
+    Output
+    ---------
+    label_image : array
+        array of labeled image after watershed, each cell has unique label
+    df : DataFrame
+        DataFrame of label_image with 'label', 'centroid', 'area', and 'mean_intensity'
+    area : int
+        sum of watershed cells 
+    '''
+    
+    distance = -1 * ndi.distance_transform_edt(image)
+    local_mini = skimage.morphology.h_minima(distance, 0)
+    
+    selem = skimage.morphology.ball(3)
+    # increased dilation of minima to prevent oversegmentation
+    local_mini_dil = skimage.morphology.dilation(local_mini, selem)
+    
+    mrkr = ndi.label(local_mini_dil)[0]
+    labels = skimage.morphology.watershed(distance, markers = mrkr, mask=image, watershed_line=True)
+    return labels, distance, mrkr
+
+def ws_nuc(image):
+    '''
+    Function to perform watershed. Will generate labels, distance transform, and markers of the watershed cells.
+    Made specifically for nuclear segmentation (distance=0, selem=6)
+    
+    ----------
+    Parameters
+    ----------
+    image : array
+        image should be filtered and segmented
+    
+    ---------
+    Output
+    ---------
+    label_image : array
+        array of labeled image after watershed, each cell has unique label
+    df : DataFrame
+        DataFrame of label_image with 'label', 'centroid', 'area', and 'mean_intensity'
+    area : int
+        sum of watershed cells 
+    '''
+    
+    distance = -1 * ndi.distance_transform_edt(image)
+    selem = skimage.morphology.ball(6)
+    # increased selem to compensate for 0 min distance
+    local_mini = skimage.morphology.h_minima(distance, 0, selem=selem)
+    
+    selem = skimage.morphology.ball(3)
+    # increased dilation of minima to prevent oversegmentation
+    local_mini_dil = skimage.morphology.dilation(local_mini, selem)
+    
+    mrkr = ndi.label(local_mini_dil)[0]
+    labels = skimage.morphology.watershed(distance, markers = mrkr,\
+                                      mask=image, watershed_line=True)
+    return labels, distance, mrkr
+
+def remove_small_df(labels, min_size, intensity_image):
+    '''
+    Function to remove small objects and generate DataFrame from watershed labels.
+    
+    ----------
+    Parameters
+    ----------
+    labels : array
+        label from watershed
+    min_size : int
+        min_size to remove small objects
+    intensity image : array (same size as labels)
+        array of intensity image, should not be adjusted
+        
+    -------
+    Output
+    -------
+    label_image : array
+        relabeled image after remove small objects
+    df : DataFrame
+        DataFrame of label_image
+    area : float
+        total area of labels
+    
+    '''
+    ws_mask = skimage.morphology.remove_small_objects(labels, min_size=min_size)
+    label_image = skimage.measure.label(ws_mask)
+    if label_image.sum() != 0:
+        props = skimage.measure.regionprops_table(label_image, intensity_image=intensity_image, properties=('label',
+                                                                                                 'centroid',
+                                                                                                 'area',
+                                                                                                 'mean_intensity'))
+        df = pd.DataFrame(props)
+        area = df['area'].sum()
+    else:
+        props = {'label': [0], 'centroid': [0], 'area': [0], 'mean_intensity': [0]}
+        df = pd.DataFrame(props)
+        area = df['area'].sum()
+    return label_image, df, area
 
 def remove_large(label_image, max_size, df, intensity_image):
     '''
@@ -720,3 +828,129 @@ def coloc(cfp_large_sub, chfp_large_sub, cfp, chfp):
     data = {'CFP mean intensity': cfp_vals, 'ChFP mean intensity': chfp_vals}
     df_co = pd.DataFrame(data)
     return df_co
+
+def freedman_diaconis_bins(data):
+    """Number of bins based on Freedman-Diaconis rule."""
+    h = 2 * (np.percentile(data, 75) - np.percentile(data, 25)) / np.cbrt(len(data))
+    return int(np.ceil((data.max() - data.min()) / h))
+
+def classify_dots(fr_c0, fr_c1, fr_c2, r_c0, r_c1, r_c2, min_dist):
+    '''
+    Function to classify dots as ONLY dots or CO dots based on distance from dots in another channel.
+    Classifies the dots of the first channel provided against the distance from dots in the second channel.
+    
+    ----------
+    Parameters
+    ----------
+    fr_c0 : array of far-red centroid-0
+    fr_c1 : array of far-red centroid-1
+    fr_c2 : array of far-red centroid-2
+    r_c0 : array of red centroid-0
+    r_c1 : array of red centroid-0
+    r_c2 : array of red centroid-0
+    min_dist : int
+        min_dist to classify dots as CO dots or ONLY dots. Should be around 4.
+        
+    -------
+    Output
+    -------
+    co_dot : list of the CO dots
+    fr_dot : list of the ONLY dots
+    
+    '''
+    co_dot = []
+    fr_dot = []
+
+    for i, (a, b, c) in enumerate(zip(fr_c0, fr_c1, fr_c2)):
+        list = []
+
+        for j, (d, e, f) in enumerate(zip(r_c0, r_c1, r_c2)):
+            p1 = np.array([a, b, c])
+            p2 = np.array([d, e, f])
+
+            squared_dist = np.sum((p1-p2)**2, axis=0)
+            dist = np.sqrt(squared_dist)
+
+            list.append(dist)
+
+        if (np.asarray(list) < min_dist).sum() == 1:
+            co_dot.append((a, b, c))
+        elif (np.asarray(list) < min_dist).sum() < 1:
+            fr_dot.append((a, b, c))
+        elif (np.asarray(list) < min_dist).sum() > 1:
+            print('There are multiple dots nearby.')
+            co_dot.append((a, b, c))
+    return co_dot, fr_dot
+
+def make_df(fr_dot):
+    '''
+    Make a DataFrame from an array of centroid positions (that was made using classify_dots() function).
+    
+    ----------
+    Parameters
+    ----------
+    fr_dot : list
+        List of centroid positions. Each entry in the list is a tuple containing the centroid0, 1, and 2.
+    
+    -------
+    Output
+    -------
+    df_fr_dot : DataFrame
+        DataFrame of centroid positions.
+    '''
+    fr_dot_0 = []
+    fr_dot_1 = []
+    fr_dot_2 = []
+
+    for i, j in enumerate(fr_dot):
+        fr_dot_0.append(fr_dot[i][0])
+        fr_dot_1.append(fr_dot[i][1])
+        fr_dot_2.append(fr_dot[i][2])
+
+    data = {'fr_dot_0': fr_dot_0,
+            'fr_dot_1': fr_dot_1,
+            'fr_dot_2': fr_dot_2,
+           }
+    df_fr_dot = pd.DataFrame(data)
+    return df_fr_dot
+
+def dots_to_nuc(df_fr_dot, fr_mo1, label_image_cfp_small_dil):
+    '''
+    Finds dots that lie within CFP positive nuclei.
+    
+    ----------
+    Parameters
+    ----------
+    df_fr_dot : DataFrame
+        DataFrame of centroid positions
+    fr_mo1 : array
+        array of suitable size
+    label_image_cfp_small_dil : array
+        dilated labels of CFP channel
+    
+    -------
+    Output
+    -------
+    df_fr_nuc : DataFrame
+        DataFrame of ALL dots within CFP+ nuclei
+    '''
+    
+    fr_only_c0 = df_fr_dot['fr_dot_0'].values
+    fr_only_c1 = df_fr_dot['fr_dot_1'].values
+    fr_only_c2 = df_fr_dot['fr_dot_2'].values
+
+    fr_dot_nuc = np.zeros_like(fr_mo1)
+
+    for i, (a, b, c) in enumerate(zip(fr_only_c0, fr_only_c1, fr_only_c2)):
+        fr_dot_nuc[a, b, c] = 1
+
+    fr_dot_nuc_bool = fr_dot_nuc.astype(bool)
+
+    fr_nuc = label_image_cfp_small_dil * fr_dot_nuc_bool
+
+    fr_nuc_relabel = skimage.measure.label(fr_nuc)
+
+    labels_fr_nuc = skimage.measure.regionprops_table(fr_nuc_relabel, properties=('label','centroid'))
+
+    df_fr_nuc = pd.DataFrame(labels_fr_nuc)
+    return df_fr_nuc
